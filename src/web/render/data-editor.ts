@@ -266,11 +266,9 @@ function pigFormHTML(p: Pig | null): string {
     ${isNew ? `
     <input type="hidden" id="deAtlasType" value="7">
     ` : `
-    <div class="de-section-sub" id="deAtlasSection" ${p!.special === true ? 'style="display:none"' : ""}>图鉴位置</div>
-    <div class="de-grid2" id="deAtlasFields" ${p!.special === true ? 'style="display:none"' : ""}>
-      ${fieldHTML("deAtlasType", "图鉴号", p?.atlas?.type ? String(p.atlas.type) : "", { type: "number", hint: "1-6 主图鉴, 7 = Events" })}
-      ${fieldHTML("deAtlasIndex", "页内序号", p?.atlas?.index ? String(p.atlas.index) : "", { type: "number", hint: "1-based, 每页 6 格" })}
-    </div>
+    <!-- atlas 字段不展示: 业务只允许编辑活动猪,图鉴位置不允许在 UI 改 (修改只能走 seed/script) -->
+    <input type="hidden" id="deAtlasType" value="${p!.atlas?.type ?? 7}">
+    <input type="hidden" id="deAtlasIndex" value="${p!.atlas?.index ?? ""}">
     `}
 
     <div class="de-section-sub">成长与价格</div>
@@ -885,20 +883,8 @@ function wirePigForm(isNew: boolean): void {
   // 绑定多选组件
   document.querySelectorAll<HTMLElement>(".de-multi-select").forEach(el => wireMultiSelect(el));
 
-  // 编辑模式: 活动猪切换时显示/隐藏图鉴位置
-  if (!isNew) {
-    const specialSel = $("#deSpecial") as HTMLSelectElement | null;
-    const atlasSection = $("#deAtlasSection") as HTMLElement | null;
-    const atlasFields = $("#deAtlasFields") as HTMLElement | null;
-    if (specialSel && atlasSection && atlasFields) {
-      const sync = () => {
-        const isEvent = specialSel.value === "1";
-        atlasSection.style.display = isEvent ? "none" : "";
-        atlasFields.style.display = isEvent ? "none" : "";
-      };
-      specialSel.addEventListener("change", sync);
-    }
-  }
+  // 注: 原"编辑模式: 活动猪切换时显示/隐藏图鉴位置"逻辑已移除
+  //      atlas 字段被隐藏为 hidden input,UI 上不展示,也不需要动态切换
 
   wireSaveButton("deSaveBtn", () => savePigFromForm(isNew));
   $("#deCancelBtn")?.addEventListener("click", () => {
