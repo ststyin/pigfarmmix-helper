@@ -247,7 +247,7 @@ export function showDetail(pNo: number): void {
   box.innerHTML = `
     <div class="drawer-title-row">
       <h2>#${p.pNo} ${escHtml(p.name)}</h2>
-      ${isEventPig && getCurrentUser() ? `<button type="button" class="drawer-name-del" id="drawerDeleteBtn" title="软删除" aria-label="软删除">🗑</button>` : ""}
+      ${isEventPig && getCurrentUser() ? `<button type="button" class="drawer-name-del" id="drawerDeleteBtn" title="删除" aria-label="删除">🗑</button>` : ""}
     </div>
     <div class="drawer-actions">${collectBtn}${raisingBtn}${waitingBtn}</div>
     <div class="hero">
@@ -291,7 +291,7 @@ export function showDetail(pNo: number): void {
   const dbtn = document.getElementById("drawerDeleteBtn");
   if (dbtn) {
     dbtn.addEventListener("click", async () => {
-      if (!(await customConfirm(`确定要软删除「${escHtml(p.name)}」吗？`))) return;
+      if (!(await customConfirm(`确定要删除「${escHtml(p.name)}」吗？`))) return;
       const result = await apiDelete({ action: "deletePig", pig: { pNo: p.pNo } });
       if (result.ok) {
         toast(`已删除: ${p.name}`);
@@ -312,10 +312,7 @@ export function showDetail(pNo: number): void {
       const parent2 = parent2Raw === "*" ? -1 : Number(parent2Raw);
       const outcomePNo = Number(btn.dataset.outcome);
       if (!parent1 || !outcomePNo) return;
-      if (!(await customConfirm(
-        `确定要删除这条配种记录吗？`,
-        `(${parent1}, ${parent2Raw}, ${outcomePNo})`
-      ))) return;
+      if (!(await customConfirm(`确定要删除这条配种记录吗？`))) return;
       const result = await apiDelete({
         action: "deleteBreeding",
         breeding: { parent1, parent2: parent2Raw === "*" ? "*" : parent2, outcomePNo },
