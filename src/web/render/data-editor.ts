@@ -877,19 +877,25 @@ function getSearchSelectValue(containerId: string): string {
 
 // ---------- 视图渲染 ----------
 
-let documentClickBound = false;
+/** 「点击面板外关闭」全局 listener 的 AbortController
+ *  模块级持久, 因为下拉是 document 级的事件 (不在 view 元素树内);
+ *  跟渲染有关 tab 状态不影响它的生命周期 — 下拉是应用全局机制。
+ *  AbortController 让未来的 teardown 能干净地取消绑定,
+ *  而 boolean flag 只适用于「绑了就不能取消」的寿命。 */
+let dropdownAbort: AbortController | null = null;
 
 export function renderDataView(): void {
   const root = $("#mineDataView");
   if (!root) return;
 
-  // 全局点击关闭下拉 (仅绑定一次)
-  if (!documentClickBound) {
-    documentClickBound = true;
+  // 「点击下拉面板外 → 关掉所有展开的下拉」: 跨 view / 跨 tab 共用同一份监听,
+  // 只绑一次。
+  if (!dropdownAbort) {
+    dropdownAbort = new AbortController();
     document.addEventListener("click", (ev) => {
       const t = ev.target as HTMLElement | null;
       if (t && !t.closest(".de-multi-select, .de-search-select")) closeAllDropdowns();
-    });
+    }, { signal: dropdownAbort.signal });
   }
 
   if (!getCurrentUser()) {
