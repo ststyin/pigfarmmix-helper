@@ -2422,6 +2422,32 @@
       background: rgba(220, 38, 38, 0.08);
     }
 
+    /* 右下角浮动删除按钮 — 仅活动猪 + 登录用户可见 */
+    .drawer-corner-del {
+      position: absolute;
+      right: 12px;
+      bottom: max(14px, env(safe-area-inset-bottom));
+      width: 28px;
+      height: 28px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 50%;
+      color: var(--muted);
+      font-size: 13px;
+      cursor: pointer;
+      opacity: 0.55;
+      z-index: 2;
+      transition: opacity var(--dur) var(--ease), color var(--dur) var(--ease), border-color var(--dur) var(--ease);
+    }
+    .drawer-corner-del:hover {
+      opacity: 1;
+      color: var(--danger);
+      border-color: var(--danger);
+    }
+
     /* 抽屉里的父本/产出：若在 186 或活动猪数据里找得到，就可点击跳转到该猪的详情 */
     .drawer [data-pno] {
       cursor: pointer;
@@ -3713,18 +3739,6 @@
       color: var(--star);
       font-size: 11px;
       letter-spacing: 1px;
-    }
-    .de-pig-del {
-      flex: 0 0 auto;
-      cursor: pointer;
-      padding: 2px 6px;
-      border-radius: var(--radius-sm);
-      color: var(--muted);
-      font-size: 14px;
-      transition: color var(--dur) var(--ease);
-    }
-    .de-pig-del:hover {
-      color: var(--danger);
     }
 
     /* 数据编辑: 高级 JSON 折叠 */

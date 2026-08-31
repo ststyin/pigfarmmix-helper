@@ -78,10 +78,6 @@ export function showDetail(pNo: number): void {
     : `<button type="button" class="add-btn" id="drawerCollectBtn">⬜ 未拥有</button>`;
   const raisingBtn = `<button type="button" class="add-btn secondary" id="drawerRaisingBtn">➕ 加入养成</button>`;
   const waitingBtn = `<button type="button" class="add-btn secondary" id="drawerWaitingBtn">📦 加入等待进货</button>`;
-  // 仅活动猪显示删除按钮; 普通猪不提供删除 (业务规则)
-  const deleteBtn = isEventPig && getCurrentUser()
-    ? `<button type="button" class="add-btn danger" id="drawerDeleteBtn">🗑 删除</button>`
-    : "";
 
   const groups = deriveAcquisitions(p);
   const acqOrder = ["shop", "hunt", "hunt_event", "fail", "feed_special"];
@@ -246,7 +242,8 @@ export function showDetail(pNo: number): void {
 
   box.innerHTML = `
     <h2>#${p.pNo} ${escHtml(p.name)}</h2>
-    <div class="drawer-actions">${collectBtn}${raisingBtn}${waitingBtn}${deleteBtn}</div>
+    <div class="drawer-actions">${collectBtn}${raisingBtn}${waitingBtn}</div>
+    ${isEventPig && getCurrentUser() ? `<button type="button" class="drawer-corner-del" id="drawerDeleteBtn" title="软删除" aria-label="软删除">🗑</button>` : ""}
     <div class="hero">
       ${pigImg ? `<img src="${pigImg}" alt="${escHtml(p.name)}">` : ""}
       <div class="info">
