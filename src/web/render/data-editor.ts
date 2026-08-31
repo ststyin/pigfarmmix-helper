@@ -126,15 +126,16 @@ function wireMultiSelect(container: HTMLElement): void {
 }
 
 /** 关闭所有已展开的下拉面板 (多选 + 可搜索单选共用) */
-function closeAllDropdowns(): void {
+export function closeAllDropdowns(): void {
   document.querySelectorAll<HTMLElement>(".de-multi-panel:not([hidden]), .de-search-select-panel:not([hidden])").forEach(p => {
     p.hidden = true;
   });
   document.querySelectorAll<HTMLElement>(".de-multi-toggle").forEach(t => t.setAttribute("aria-expanded", "false"));
   document.querySelectorAll<HTMLElement>(".de-multi-select, .de-search-select").forEach(s => {
     s.classList.remove("open");
-    const input = s.querySelector<HTMLInputElement>(".de-search-select-input");
-    if (input) input.value = "";
+    // 多选下拉 (de-multi-select) 与可搜索单选 (de-search-select) 共用同一机制
+    // — 关闭后需要清掉各自面板里的搜索框, 否则用户下次打开看到的列表会被上次的过滤词隐起来
+    s.querySelectorAll<HTMLInputElement>(".de-multi-search, .de-search-select-input").forEach(input => { input.value = ""; });
   });
 }
 
