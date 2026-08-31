@@ -119,10 +119,10 @@ async function savePig(db: D1Database, body: Record<string, unknown>): Promise<{
       graze = excluded.graze,
       special = excluded.special,
       status = excluded.status,
-      acquisition = excluded.acquisition,
-      feeding = excluded.feeding,
-      breeding_guide = excluded.breeding_guide,
-      hints = excluded.hints,
+      acquisition = CASE WHEN excluded.acquisition IS NULL THEN acquisition ELSE excluded.acquisition END,
+      feeding = CASE WHEN excluded.feeding IS NULL THEN feeding ELSE excluded.feeding END,
+      breeding_guide = CASE WHEN excluded.breeding_guide IS NULL THEN breeding_guide ELSE excluded.breeding_guide END,
+      hints = CASE WHEN excluded.hints IS NULL THEN hints ELSE excluded.hints END,
       updated_at = excluded.updated_at
   `).bind(
     pNo, name, rare, color,

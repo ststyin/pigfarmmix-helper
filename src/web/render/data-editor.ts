@@ -423,55 +423,99 @@ function parseJsonField(sel: string): unknown {
   try { return JSON.parse(v); } catch { return undefined; }
 }
 
-/** 从友好字段构建 acquisition 对象 */
-function buildAcquisition(isNew: boolean): PigAcquisition {
+/** 数组等价比较 (按顺序、严格相等) */
+function arraysEqual(a: readonly number[], b: readonly number[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+
+/** 浮点数组等价 (1e-4 容差 — 覆盖 UI 2 位小数 + 后端高精度舍入误差) */
+function arraysClose(a: readonly number[], b: readonly number[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (Math.abs(a[i] - b[i]) > 1e-4) return false;
+  return true;
+}
+
+/** 字符串数组等价 (按顺序、严格相等) */
+function stringArraysEqual(a: readonly string[], b: readonly string[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+
+/** 从友好字段构建 acquisition 对象 (与基线对比,仅输出变更字段)
+ *  - 新增 (base=undefined): 只要填了值就输出
+ *  - 编辑: 与 base?.X 逐字段对比,差异才输出
+ *  - 返回空对象表示本次未做任何改动 → 上层不发送该 key → 后端 partial merge 保留原值
+ */
+function buildAcquisition(base: PigAcquisition | undefined, isNew: boolean): PigAcquisition {
   const a: PigAcquisition = {};
 
-  // 商店 — 仅编辑模式显示
+  // 商店 — 仅编辑模式显示。三个槽位独立处理:
+  //   用户填了某槽 → 该槽用 form 值; 未填 (null) → 保留 base 在该槽的值
+  //   三个槽都跟 base 一致 → 不输出 shop
+  //   任一槽 form 有填且与 base 不同 → 输出完整 [a, b, c] (未填的槽用 base 的值填上)
   if (!isNew) {
-    const shopA = numOrNull(val("#deShopA"));
-    const shopB = numOrNull(val("#deShopB"));
-    const shopC = numOrNull(val("#deShopC"));
-    if (shopA != null || shopB != null || shopC != null) {
-      a.shop = [shopA != null ? shopA / 100 : 0, shopB != null ? shopB / 100 : 0, shopC != null ? shopC / 100 : 0];
+    const shopInputs: [number | null, number | null, number | null] = [
+      numOrNull(val("#deShopA")),
+      numOrNull(val("#deShopB")),
+      numOrNull(val("#deShopC")),
+    ];
+    const origShop: [number, number, number] = base?.shop
+      ? [base.shop[0] ?? 0, base.shop[1] ?? 0, base.shop[2] ?? 0]
+      : [0, 0, 0];
+    let shopChanged = false;
+    const merged: [number, number, number] = [0, 0, 0];
+    for (let i = 0; i < 3; i++) {
+      const formVal = shopInputs[i];
+      const origVal = origShop[i];
+      const finalVal = formVal != null ? formVal / 100 : origVal;
+      merged[i] = finalVal;
+      if (formVal != null && Math.abs(finalVal - origVal) > 1e-4) shopChanged = true;
     }
+    if (shopChanged) a.shop = merged;
   }
 
-  // 狩猎站点 (多选)
+  // 狩猎站点 (多选): 变更才输出 (不含 prob — 后端会保留原 prob)
   const sites = getMultiSelectValues("deHuntSites");
-  if (sites.length) a.hunt = { ...(a.hunt || {}), sites };
+  const origSites = base?.hunt?.sites || [];
+  if (!arraysEqual(sites, origSites)) a.hunt = { sites };
 
   // 养成失败来源 — 仅编辑模式
   if (!isNew) {
     const fail = getMultiSelectValues("deFailFrom");
-    if (fail.length) a.fail = fail;
+    const origFail = base?.fail || [];
+    if (!arraysEqual(fail, origFail)) a.fail = fail;
   }
 
   const specialFeeding = ($("#deSpecialFeeding") as HTMLInputElement | null)?.checked ?? false;
-  if (specialFeeding) a.specialFeeding = true;
+  const origSF = base?.specialFeeding || false;
+  if (isNew || origSF !== specialFeeding) a.specialFeeding = specialFeeding;
 
   return a;
 }
 
-/** 从友好字段构建 feeding 对象 */
-function buildFeeding(): PigFeeding {
+/** 从友好字段构建 feeding 对象 (与基线对比,仅输出变更字段) */
+function buildFeeding(base: PigFeeding | undefined): PigFeeding {
   const f: PigFeeding = {};
   const interval = numOrNull(val("#deFeedInterval"));
   const times = numOrNull(val("#deFeedTimes"));
   const picky = getMultiSelectValues("deFeedPicky");
-  if (interval != null) f.interval = interval;
-  if (times != null) f.times = times;
-  if (picky.length) f.picky = picky;
+
+  if (interval != null && interval !== base?.interval) f.interval = interval;
+  if (times != null && times !== base?.times) f.times = times;
+  if (!arraysEqual(picky, base?.picky || [])) f.picky = picky;
   return f;
 }
 
-/** 从友好字段构建 breedingGuide 对象 */
-function buildGuide(): BreedingGuide {
+/** 从友好字段构建 breedingGuide 对象 (与基线对比,仅输出变更字段) */
+function buildGuide(base: BreedingGuide | undefined): BreedingGuide {
   const g: BreedingGuide = {};
   const req = val("#deGuideReq");
   const tips = val("#deGuideTips");
-  if (req) g.requirements = req;
-  if (tips) g.tips = tips;
+  if (req && req !== (base?.requirements || "")) g.requirements = req;
+  if (tips && tips !== (base?.tips || "")) g.tips = tips;
   return g;
 }
 
@@ -507,25 +551,36 @@ async function savePigFromForm(isNew: boolean): Promise<void> {
     pig.pNo = Number(($("#dePNo") as HTMLInputElement | null)?.value || 0);
   }
 
-  // 友好字段优先; 若高级 JSON 填了, 以 JSON 为准
+  // 从 state 拿基线 pig — 作为 JSON 字段 diff 的对比基准
+  // partial merge 语义: 友好字段仅在变更时才输出,原 UI 未暴露的字段(hunt.prob 等)由后端保留
+  const basePig = !isNew
+    ? state.pigsById.get(Number(pig.pNo))
+      || state.eventPigsById.get(Number(pig.pNo))
+      || state.hiddenPigsById.get(Number(pig.pNo))
+    : undefined;
+
+  // 友好字段优先; 若高级 JSON 填了, 以 JSON 为准 (JSON = 完全替换)
   const acqJSON = parseJsonField("#deAcquisitionJSON");
   const feedJSON = parseJsonField("#deFeedingJSON");
   const guideJSON = parseJsonField("#deBreedingGuideJSON");
   const hintsJSON = parseJsonField("#deHintsJSON");
 
-  const acq = buildAcquisition(isNew);
-  if (Object.keys(acq).length > 0 || acqJSON === undefined) pig.acquisition = acqJSON !== undefined ? acqJSON : (Object.keys(acq).length ? acq : undefined);
-  const feed = buildFeeding();
-  if (Object.keys(feed).length > 0 || feedJSON === undefined) pig.feeding = feedJSON !== undefined ? feedJSON : (Object.keys(feed).length ? feed : undefined);
-  const guide = buildGuide();
-  if (Object.keys(guide).length > 0 || guideJSON === undefined) pig.breedingGuide = guideJSON !== undefined ? guideJSON : (Object.keys(guide).length ? guide : undefined);
+  const acq = buildAcquisition(basePig?.acquisition, isNew);
+  const feed = buildFeeding(basePig?.feeding);
+  const guide = buildGuide(basePig?.breedingGuide);
 
-  // 提示: 每行一条; 高级 JSON 优先
+  // 仅在“未填高级 JSON 且 友好字段存在变更”时 才发送该 key
+  // 发出的值: 高级 JSON > diff 后的友好对象 > undefined(不发送,后端保留)
+  pig.acquisition = acqJSON !== undefined ? acqJSON : (Object.keys(acq).length ? acq : undefined);
+  pig.feeding = feedJSON !== undefined ? feedJSON : (Object.keys(feed).length ? feed : undefined);
+  pig.breedingGuide = guideJSON !== undefined ? guideJSON : (Object.keys(guide).length ? guide : undefined);
+
+  // 提示: 每行一条; 高级 JSON 优先; 与基线一致则不发 (含主动清空 → 输出 [])
   if (hintsJSON !== undefined) {
     pig.hints = hintsJSON;
   } else {
     const hintLines = val("#deHints").split("\n").map(s => s.trim()).filter(Boolean);
-    if (hintLines.length) pig.hints = hintLines;
+    if (!stringArraysEqual(hintLines, basePig?.hints || [])) pig.hints = hintLines;
   }
 
   const result = await apiSave({ pig });
