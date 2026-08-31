@@ -26,6 +26,12 @@ export interface Pig {
   feeding?: Record<string, unknown>;
   breedingGuide?: Record<string, unknown>;
   hints?: string[];
+  /** 最后编辑人 userId (NULL = System / seed 数据) */
+  updatedBy?: string | null;
+  /** 最后编辑人昵名 (NULL = System 或用户已被删除) — atlas/pigs.ts 用 LEFT JOIN users 填充 */
+  updatedByName?: string | null;
+  /** 最后编辑时间戳 (毫秒) */
+  updatedAt?: number;
 }
 
 export interface BreedingRecord {
@@ -64,6 +70,9 @@ function rowToPig(row: Record<string, unknown>): Pig {
     feeding: parseJsonField(row.feeding) as Record<string, unknown> | undefined,
     breedingGuide: parseJsonField(row.breeding_guide) as Record<string, unknown> | undefined,
     hints: parseJsonField(row.hints) as string[] | undefined,
+    updatedBy: row.updated_by ? String(row.updated_by) : null,
+    updatedByName: row.updated_by_name ? String(row.updated_by_name) : null,
+    updatedAt: row.updated_at ? Number(row.updated_at) : undefined,
   };
   return pig;
 }
@@ -73,7 +82,12 @@ export async function onRequestGet(context: { env: { DB: D1Database } }): Promis
 
   try {
     const [pigsResult, breedingResult] = await Promise.all([
-      db.prepare("SELECT * FROM pigs ORDER BY p_no").all(),
+      db.prepare(`
+        SELECT p.*, u.nickname AS updated_by_name
+        FROM pigs p
+        LEFT JOIN users u ON p.updated_by = u.id
+        ORDER BY p.p_no
+      `).all(),
       db.prepare("SELECT * FROM breeding ORDER BY id").all(),
     ]);
 

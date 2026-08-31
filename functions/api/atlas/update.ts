@@ -2,10 +2,11 @@
  * Cloudflare Pages Function: 图鉴数据编辑
  * POST /api/atlas/update — 保存猪数据 / 新增猪 / 新增配种信息
  *
- * 权限: 需要登录 (userId 校验)。当前为单库公开编辑, 后续可按需加权限控制。
+ * 权限: 需要登录 (从 session cookie 取 userId, 不信任 body 里的 userId)。
+ * 记录最后编辑人 (写入 pigs.updated_by)。
  */
 
-import { jsonResponse, badRequest, readJson, validateUserId } from "../_utils.ts";
+import { jsonResponse, badRequest, readJson, getAuthUserId, unauthorizedResponse } from "../_utils.ts";
 
 interface Env {
   DB: D1Database;
@@ -62,7 +63,7 @@ interface PigInput {
   hints?: unknown;
 }
 
-async function savePig(db: D1Database, body: Record<string, unknown>): Promise<{ pNo: number } | null> {
+async function savePig(db: D1Database, body: Record<string, unknown>, editorId: string): Promise<{ pNo: number } | null> {
   const raw = body.pig as PigInput | undefined;
   if (!raw || typeof raw !== "object") return null;
 
@@ -100,9 +101,9 @@ async function savePig(db: D1Database, body: Record<string, unknown>): Promise<{
     INSERT INTO pigs (
       p_no, name, rare, color, description, atlas_type, atlas_index, atlas_visible,
       weight_small, weight_big, rent, price, lifespan, graze, special, status,
-      acquisition, feeding, breeding_guide, hints, updated_at
+      acquisition, feeding, breeding_guide, hints, updated_at, updated_by
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(p_no) DO UPDATE SET
       name = excluded.name,
       rare = excluded.rare,
@@ -123,13 +124,14 @@ async function savePig(db: D1Database, body: Record<string, unknown>): Promise<{
       feeding = CASE WHEN excluded.feeding IS NULL THEN feeding ELSE excluded.feeding END,
       breeding_guide = CASE WHEN excluded.breeding_guide IS NULL THEN breeding_guide ELSE excluded.breeding_guide END,
       hints = CASE WHEN excluded.hints IS NULL THEN hints ELSE excluded.hints END,
-      updated_at = excluded.updated_at
+      updated_at = excluded.updated_at,
+      updated_by = excluded.updated_by
   `).bind(
     pNo, name, rare, color,
     raw.description != null ? cleanStr(raw.description, 2000) : null,
     atlasType || null, atlasIndex || null, atlasVisible,
     weightSmall, weightBig, rent, price, lifespan, graze, special, status,
-    acquisition, feeding, breedingGuide, hints, now,
+    acquisition, feeding, breedingGuide, hints, now, editorId,
   ).run();
 
   return { pNo };
@@ -189,20 +191,18 @@ export async function onRequestPost(context: { request: Request; env: Env }): Pr
   const db = context.env.DB;
   if (!db) return jsonResponse({ ok: false, error: "D1 binding DB is missing" }, 500);
 
+  // 鉴权: 从 session cookie 取 userId, 不信任 body 里的 userId (防身份伪造)
+  const userId = await getAuthUserId(context.request, db);
+  if (!userId) return unauthorizedResponse();
+
   const body = await readJson(context.request);
   if (!body) return badRequest("Invalid JSON body");
-
-  // 登录校验
-  const userId = body.userId;
-  if (!validateUserId(userId)) {
-    return jsonResponse({ ok: false, error: "请先登录" }, 401);
-  }
 
   const results: Record<string, unknown> = { ok: true };
 
   try {
     if (body.pig) {
-      const saved = await savePig(db, body);
+      const saved = await savePig(db, body, userId);
       if (!saved) return badRequest("猪数据无效");
       results.pig = saved;
     }

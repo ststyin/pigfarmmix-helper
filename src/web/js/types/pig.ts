@@ -106,6 +106,12 @@ export interface Pig {
   breedingGuide?: BreedingGuide;
   /** 提示列表 */
   hints?: string[];
+  /** 最后编辑人 userId (NULL = System / seed 数据) */
+  updatedBy?: string | null;
+  /** 最后编辑人昵名 (NULL = System 或用户已删除) — 后端用 LEFT JOIN users 填充 */
+  updatedByName?: string | null;
+  /** 最后编辑时间戳 (毫秒) — 可选展示 */
+  updatedAt?: number;
 }
 
 /** 图鉴颜色 */

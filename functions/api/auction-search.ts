@@ -9,7 +9,7 @@
  * 路由:POST /api/auction-search?<query params>
  */
 
-import { jsonResponse, validateUserId, corsOptionsResponse } from "./_utils.ts";
+import { jsonResponse, getAuthUserId, corsOptionsResponse } from "./_utils.ts";
 
 interface Env {
   DB: D1Database;
@@ -125,15 +125,7 @@ function unauthorizedResponse(): Response {
   );
 }
 
-/** 验证用户是否存在 */
-async function verifyUser(db: D1Database, userId: string | null): Promise<boolean> {
-  if (!validateUserId(userId)) return false;
-  const user = await db
-    .prepare("SELECT id FROM users WHERE id = ? LIMIT 1")
-    .bind(userId)
-    .first<{ id: string }>();
-  return !!user;
-}
+
 
 /** 上游单次最多 30 条;按色组 fan-out 才能拿全。 */
 const COLOR_CODES = ["700", "704", "708", "712", "716", "720"];
@@ -214,24 +206,14 @@ async function logAuctionSearch(
 export async function onRequestPost(context: { request: Request; env: Env; waitUntil: (p: Promise<unknown>) => void }): Promise<Response> {
   const db = context.env.DB;
 
-  // 从请求中获取 userId(支持 query 参数或 body)
+  // 鉴权: 从 session cookie 取 userId, 不信任 query/body 里的 userId (防身份伪造)
+  if (!db) {
+    return jsonResponse({ ok: false, error: "数据库未配置" }, 500);
+  }
+  const userId = await getAuthUserId(context.request, db);
+  if (!userId) return unauthorizedResponse();
+
   const url = new URL(context.request.url);
-  let userId: string | null = url.searchParams.get("userId") || null;
-
-  if (!userId) {
-    try {
-      const contentType = context.request.headers.get("content-type") || "";
-      if (contentType.includes("application/json")) {
-        const body = await context.request.json() as { userId?: string };
-        userId = body.userId || null;
-      }
-    } catch { /* ignore */ }
-  }
-
-  // 验证用户登录状态
-  if (!db || !(await verifyUser(db, userId))) {
-    return unauthorizedResponse();
-  }
 
   const sp = url.searchParams;
   const get = (k: string, def = ""): string => sp.get(k) ?? def;

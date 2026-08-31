@@ -119,12 +119,18 @@ function pigMetaParts(p: Pig): (HTMLElement | null)[] {
   const pickyLabel = picky.level === "none" ? "🍽️ 不挑食" : `🍽️ ${picky.label}`;
   const pickyEl = el("span", { class: "picky " + picky.level, title: pickyTitle }, pickyLabel);
   const feedN = (p.feeding && p.feeding.times) || 0;
+  const editorName = p.updatedByName || "System";
+  const editorTitle = p.updatedAt
+    ? `最后编辑: ${editorName} · ${new Date(p.updatedAt).toLocaleString("zh-CN")}`
+    : `最后编辑: ${editorName}`;
+  const editorEl = el("span", { class: "last-editor", title: editorTitle }, `✏️ ${editorName}`);
   return [
     p.color_text ? el("span", { class: "color" }, p.color_text) : null,
     posText ? el("span", { class: "pos" }, posText) : null,
     el("span", { class: "feed", title: `最少喂食 ${feedN} 次` }, `🍚 ${feedN}`),
     grazeBadge,
     pickyEl,
+    editorEl,
   ];
 }
 

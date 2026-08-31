@@ -3,7 +3,7 @@
  * POST /api/auth/login
  */
 
-import { jsonResponse, badRequest, readJson, cleanNickname, cleanDeviceCode, corsOptionsResponse } from "../_utils.ts";
+import { jsonResponse, badRequest, readJson, cleanNickname, cleanDeviceCode, corsOptionsResponse, buildSessionCookie } from "../_utils.ts";
 
 interface Env {
   DB: D1Database;
@@ -74,7 +74,7 @@ export async function onRequestPost(context: { request: Request; env: Env }): Pr
         createdAt: user.created_at,
         lastSyncAt: user.last_sync_at,
       },
-    });
+    }, 200, { "Set-Cookie": buildSessionCookie(user.id, context.request) });
   } catch (error) {
     console.error("[auth/login] Error:", error);
     return jsonResponse({ ok: false, error: "登录失败,请稍后重试" }, 500);

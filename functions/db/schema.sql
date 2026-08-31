@@ -34,7 +34,8 @@ CREATE TABLE IF NOT EXISTS pigs (
   feeding       TEXT,                         -- JSON: {interval, times, picky}
   breeding_guide TEXT,                        -- JSON: {requirements, tips}
   hints         TEXT,                         -- JSON: string[]
-  updated_at    INTEGER NOT NULL DEFAULT 0
+  updated_at    INTEGER NOT NULL DEFAULT 0,
+  updated_by    TEXT                          -- 最后编辑人 userId (NULL = System / seed)
 );
 
 -- 图鉴位置索引

@@ -4,7 +4,7 @@
  * GET  /api/sync/collection - 仅获取云端数据
  */
 
-import { jsonResponse, badRequest, readJson, validateUserId, corsOptionsResponse } from "../_utils.ts";
+import { jsonResponse, badRequest, readJson, getAuthUserId, unauthorizedResponse, corsOptionsResponse } from "../_utils.ts";
 
 interface Env {
   DB: D1Database;
@@ -177,12 +177,9 @@ export async function onRequestGet(context: { request: Request; env: Env }): Pro
     return jsonResponse({ ok: false, error: "数据库未配置" }, 500);
   }
 
-  const url = new URL(context.request.url);
-  const userId = url.searchParams.get("userId");
-
-  if (!validateUserId(userId)) {
-    return badRequest("用户 ID 格式不正确");
-  }
+  // 鉴权: 从 session cookie 取 userId, 不信任 query 里的 userId (防身份伪造)
+  const userId = await getAuthUserId(context.request, db);
+  if (!userId) return unauthorizedResponse();
 
   try {
     const user = await db
@@ -216,14 +213,13 @@ export async function onRequestPost(context: { request: Request; env: Env }): Pr
     return jsonResponse({ ok: false, error: "数据库未配置" }, 500);
   }
 
+  // 鉴权: 从 session cookie 取 userId, 不信任 body 里的 userId (防身份伪造)
+  const userId = await getAuthUserId(context.request, db);
+  if (!userId) return unauthorizedResponse();
+
   const body = await readJson(context.request);
   if (!body) {
     return badRequest("请求格式错误");
-  }
-
-  const userId = body.userId;
-  if (!validateUserId(userId)) {
-    return badRequest("用户 ID 格式不正确");
   }
 
   const localData = body.localData;

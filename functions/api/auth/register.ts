@@ -3,7 +3,7 @@
  * POST /api/auth/register
  */
 
-import { jsonResponse, badRequest, readJson, cleanNickname, corsOptionsResponse } from "../_utils.ts";
+import { jsonResponse, badRequest, readJson, cleanNickname, corsOptionsResponse, buildSessionCookie } from "../_utils.ts";
 
 interface Env {
   DB: D1Database;
@@ -79,7 +79,7 @@ export async function onRequestPost(context: { request: Request; env: Env }): Pr
         deviceCode,
         createdAt: now,
       },
-    });
+    }, 200, { "Set-Cookie": buildSessionCookie(userId, context.request) });
   } catch (error) {
     console.error("[auth/register] Error:", error);
     return jsonResponse({ ok: false, error: "注册失败,请稍后重试" }, 500);

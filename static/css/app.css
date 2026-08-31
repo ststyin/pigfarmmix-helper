@@ -878,6 +878,11 @@
       color: var(--warn);
     }
 
+    .list-row .meta .last-editor {
+      color: var(--muted);
+      opacity: 0.85;
+    }
+
     .list-row .badge-row {
       display: flex;
       gap: 6px;

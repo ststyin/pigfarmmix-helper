@@ -80,6 +80,7 @@ function main() {
       breedingGuide ? `'${esc(breedingGuide)}'` : "NULL",
       hints ? `'${esc(hints)}'` : "NULL",
       Date.now(),
+      "NULL",  // updated_by — seed 猪无编辑人,显示 System
     ];
     pigValues.push(`(${vals.join(", ")})`);
   }
@@ -92,7 +93,7 @@ function main() {
     lines.push("  atlas_type, atlas_index, atlas_visible,");
     lines.push("  weight_small, weight_big,");
     lines.push("  rent, price, lifespan, graze, special, status,");
-    lines.push("  acquisition, feeding, breeding_guide, hints, updated_at");
+    lines.push("  acquisition, feeding, breeding_guide, hints, updated_at, updated_by");
     lines.push(") VALUES");
     lines.push(chunk.join(",\n") + ";");
     lines.push("");
