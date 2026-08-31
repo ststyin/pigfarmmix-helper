@@ -2405,6 +2405,7 @@
     .drawer-actions {
       display: flex;
       gap: 8px;
+      padding: 0 14px;  /* 与 .hero 内容的 14px padding 对齐 */
       margin: 0 0 10px;
     }
 
@@ -2422,27 +2423,35 @@
       background: rgba(220, 38, 38, 0.08);
     }
 
-    /* 右下角浮动删除按钮 — 仅活动猪 + 登录用户可见 */
-    .drawer-corner-del {
-      position: absolute;
-      right: 12px;
-      bottom: max(14px, env(safe-area-inset-bottom));
-      width: 28px;
-      height: 28px;
+    /* 猪名右侧删除按钮 — 仅活动猪 + 登录用户可见 */
+    .drawer-title-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .drawer-title-row h2 {
+      flex: 1;
+      min-width: 0;
+      margin: 4px 0 8px;
+    }
+    .drawer-name-del {
+      flex: 0 0 auto;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      width: 32px;
+      height: 32px;
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 50%;
       color: var(--muted);
-      font-size: 13px;
+      font-size: 14px;
       cursor: pointer;
       opacity: 0.55;
-      z-index: 2;
       transition: opacity var(--dur) var(--ease), color var(--dur) var(--ease), border-color var(--dur) var(--ease);
     }
-    .drawer-corner-del:hover {
+    .drawer-name-del:hover {
       opacity: 1;
       color: var(--danger);
       border-color: var(--danger);
@@ -2767,24 +2776,34 @@
       justify-content: space-between;
       gap: 4px;
       flex-wrap: wrap;
-      padding: 6px 0;
+      padding: 6px 28px 8px 0;  /* 右侧留出 delBtn 位置 */
+      position: relative;
     }
 
     .recipe .equation+.equation {
       border-top: 1px dashed var(--border);
     }
     .recipe-del-btn {
-      flex: 0 0 auto;
+      position: absolute;
+      right: 4px;
+      bottom: 4px;
       background: transparent;
       border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      padding: 2px 6px;
-      font-size: 12px;
-      cursor: pointer;
+      border-radius: 50%;
+      width: 18px;
+      height: 18px;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
       color: var(--muted);
-      transition: color var(--dur) var(--ease), border-color var(--dur) var(--ease);
+      cursor: pointer;
+      opacity: 0.5;
+      transition: opacity var(--dur) var(--ease), color var(--dur) var(--ease), border-color var(--dur) var(--ease);
     }
     .recipe-del-btn:hover {
+      opacity: 1;
       color: var(--danger);
       border-color: var(--danger);
     }

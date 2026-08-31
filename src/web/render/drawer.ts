@@ -241,9 +241,11 @@ export function showDetail(pNo: number): void {
     : "";
 
   box.innerHTML = `
-    <h2>#${p.pNo} ${escHtml(p.name)}</h2>
+    <div class="drawer-title-row">
+      <h2>#${p.pNo} ${escHtml(p.name)}</h2>
+      ${isEventPig && getCurrentUser() ? `<button type="button" class="drawer-name-del" id="drawerDeleteBtn" title="软删除" aria-label="软删除">🗑</button>` : ""}
+    </div>
     <div class="drawer-actions">${collectBtn}${raisingBtn}${waitingBtn}</div>
-    ${isEventPig && getCurrentUser() ? `<button type="button" class="drawer-corner-del" id="drawerDeleteBtn" title="软删除" aria-label="软删除">🗑</button>` : ""}
     <div class="hero">
       ${pigImg ? `<img src="${pigImg}" alt="${escHtml(p.name)}">` : ""}
       <div class="info">
