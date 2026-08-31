@@ -235,6 +235,9 @@ function pigFormHTML(p: Pig | null): string {
   return `
   <div class="de-form">
     <div class="de-section-title">${isNew ? "新增猪" : `编辑猪 #${p!.pNo} ${esc(p!.name)}`}</div>
+    <div class="de-hint" style="margin-bottom: 10px;">
+      数值字段: 留空 = 保留原值 · 填 0 = 清零 · 非法输入会在保存时被拦截
+    </div>
     ${isNew ? "" : `<input type="hidden" id="dePNo" value="${p!.pNo}">`}
 
     <div class="de-section-sub">基本信息</div>
@@ -410,6 +413,43 @@ function numOrNull(v: string): number | null {
   if (!s) return null;
   const n = Number(s);
   return Number.isFinite(n) ? n : null;
+}
+
+/** 数值输入框实时校验 (input 事件) + 初始校验 (编辑模式预填值)
+ *  规则: 空 = OK (保留原值); 非数字 / 负数 = 标记错误 (红色边框)
+ *  返回一个函数,调用时重跑所有字段校验, 用于保存前最后检查 */
+function wireNumericValidation(ids: readonly string[]): () => boolean {
+  const inputs: HTMLInputElement[] = [];
+  for (const id of ids) {
+    const el = document.getElementById(id) as HTMLInputElement | null;
+    if (!el) continue;
+    inputs.push(el);
+    const validate = () => {
+      const v = el.value.trim();
+      if (v === "") {
+        el.classList.remove("de-input-error");
+        return;
+      }
+      const n = Number(v);
+      if (Number.isFinite(n) && n >= 0) {
+        el.classList.remove("de-input-error");
+      } else {
+        el.classList.add("de-input-error");
+      }
+    };
+    el.addEventListener("input", validate);
+    validate(); // 初始化时校验编辑模式预填值
+  }
+  return () => {
+    for (const el of inputs) {
+      const v = el.value.trim();
+      if (v === "") { el.classList.remove("de-input-error"); continue; }
+      const n = Number(v);
+      if (!Number.isFinite(n) || n < 0) el.classList.add("de-input-error");
+      else el.classList.remove("de-input-error");
+    }
+    return !inputs.some(el => el.classList.contains("de-input-error"));
+  };
 }
 
 function val(sel: string): string {
@@ -883,10 +923,26 @@ function wirePigForm(isNew: boolean): void {
   // 绑定多选组件
   document.querySelectorAll<HTMLElement>(".de-multi-select").forEach(el => wireMultiSelect(el));
 
+  // 数值字段实时校验 (负数 / 非数字 → 红色边框)
+  const validateAll = wireNumericValidation([
+    "deWeightSmall", "deWeightBig",
+    "deRent", "dePrice", "deLifespan",
+    "deShopA", "deShopB", "deShopC",
+    "deFeedInterval", "deFeedTimes",
+  ]);
+
   // 注: 原"编辑模式: 活动猪切换时显示/隐藏图鉴位置"逻辑已移除
   //      atlas 字段被隐藏为 hidden input,UI 上不展示,也不需要动态切换
 
-  wireSaveButton("deSaveBtn", () => savePigFromForm(isNew));
+  wireSaveButton("deSaveBtn", async () => {
+    // 保存前最后一道校验: 有错误则拦截,提示用户
+    if (!validateAll()) {
+      const m = $("#deMsg");
+      if (m) { m.textContent = "数值字段有错误,请检查红色高亮项"; m.className = "account-form-hint error"; }
+      return;
+    }
+    await savePigFromForm(isNew);
+  });
   $("#deCancelBtn")?.addEventListener("click", () => {
     const body = $("#deBody");
     if (!body) return;
