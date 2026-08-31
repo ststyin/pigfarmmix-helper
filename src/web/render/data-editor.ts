@@ -647,14 +647,11 @@ async function savePigFromForm(isNew: boolean): Promise<void> {
     m.textContent = "保存成功,正在刷新数据...";
     m.className = "account-form-hint success";
     await reloadData({ silent: true });
-    if (isNew && result.pig?.pNo) {
-      toast(`已新增 #${result.pig.pNo},可在「编辑猪」中查看`, 2800);
-    } else {
-      toast("已保存", 2200);
-    }
-    // 切回 picker — 让用户继续编辑别的或看到刚加的猪
-    const editTab = $("#mineDataView")?.querySelector<HTMLElement>('.de-tab[data-de-tab="edit"]');
-    editTab?.click();
+    // 弹出刚保存的猪的抽屉 — 让用户立刻看到自己的改动生效
+    // (reloadData 后 state 已更新,抽屉会读到最新的数据)
+    const detailPNo = isNew ? result.pig?.pNo : Number(pig.pNo);
+    if (detailPNo) emit("show-detail", detailPNo);
+    toast(isNew ? `已新增 #${detailPNo}` : "已保存", 2200);
   } else {
     m.textContent = result.error || "保存失败";
     m.className = "account-form-hint error";
