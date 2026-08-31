@@ -5,7 +5,7 @@
 import type { Pig } from "../js/types/index.js";
 import { state } from "../js/state.js";
 import { $, escHtml, imgUrl, stars, badgeMetaHTML, feedIntervalText, pigPicky, toast, handleAuthFailure } from "../js/utils.js";
-import { deriveAcquisitions, setPigOwned, setPigBadge } from "../js/data.js";
+import { deriveAcquisitions, setPigOwned, setPigBadge, refreshDataFromServer } from "../js/data.js";
 import { customConfirm } from "../js/modal.js";
 import { BLEED_TYPE_TEXT, METHOD_LABELS } from "../js/constants.js";
 import { emit } from "../js/events.js";
@@ -294,6 +294,8 @@ export function showDetail(pNo: number): void {
       if (!(await customConfirm(`确定要删除「${escHtml(p.name)}」吗？`))) return;
       const result = await apiDelete({ action: "deletePig", pig: { pNo: p.pNo } });
       if (result.ok) {
+        // 立即从服务端拉最新数据,避免状态不同步
+        await refreshDataFromServer();
         toast(`已删除: ${p.name}`);
         closeDrawer();
         emit("ui-refresh", undefined);
@@ -318,6 +320,8 @@ export function showDetail(pNo: number): void {
         breeding: { parent1, parent2: parent2Raw === "*" ? "*" : parent2, outcomePNo },
       });
       if (result.ok) {
+        // 立即从服务端拉最新数据,避免状态不同步
+        await refreshDataFromServer();
         toast("配种已删除");
         emit("ui-refresh", undefined);
         showDetail(p.pNo); // 重渲染抽屉
