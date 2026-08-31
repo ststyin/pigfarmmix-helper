@@ -387,7 +387,7 @@ function breedingFormHTML(): string {
 
 // ---------- 保存 ----------
 
-async function apiSave(body: Record<string, unknown>): Promise<{ ok: boolean; error?: string }> {
+async function apiSave(body: Record<string, unknown>): Promise<{ ok: boolean; error?: string; pig?: { pNo: number }; breeding?: boolean }> {
   const user = getCurrentUser();
   if (!user) return { ok: false, error: "请先登录" };
   try {
@@ -396,12 +396,13 @@ async function apiSave(body: Record<string, unknown>): Promise<{ ok: boolean; er
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ userId: user.id, ...body }),
     });
-    const data = await res.json() as { ok?: boolean; error?: string };
+    const data = await res.json() as { ok?: boolean; error?: string; pig?: { pNo: number }; breeding?: boolean };
     if (!res.ok || data.ok === false) {
       return { ok: false, error: data.error || `HTTP ${res.status}` };
     }
-    return { ok: true };
-  } catch {
+    return { ok: true, pig: data.pig, breeding: data.breeding };
+  } catch (err) {
+    console.error("[apiSave]", err);
     return { ok: false, error: "网络错误,请稍后重试" };
   }
 }
@@ -421,6 +422,23 @@ function parseJsonField(sel: string): unknown {
   const v = val(sel);
   if (!v) return undefined;
   try { return JSON.parse(v); } catch { return undefined; }
+}
+
+/** 保存按钮防重复点击包装 — 仿照 app.ts wireRefreshButton 模式
+ *  saveFn 是 async 的;调用中加 is-loading,结束后 (try/finally) 移除
+ *  防 click handler 在请求 in-flight 时被重复触发 (例如配种会多插一条) */
+function wireSaveButton(btnId: string, saveFn: () => Promise<void>): void {
+  const btn = document.getElementById(btnId);
+  if (!btn) return;
+  btn.addEventListener("click", async () => {
+    if (btn.classList.contains("is-loading")) return;
+    btn.classList.add("is-loading");
+    try {
+      await saveFn();
+    } finally {
+      btn.classList.remove("is-loading");
+    }
+  });
 }
 
 /** 数组等价比较 (按顺序、严格相等) */
@@ -589,7 +607,15 @@ async function savePigFromForm(isNew: boolean): Promise<void> {
   if (result.ok) {
     m.textContent = "保存成功,正在刷新数据...";
     m.className = "account-form-hint success";
-    await reloadData();
+    await reloadData({ silent: true });
+    if (isNew && result.pig?.pNo) {
+      toast(`已新增 #${result.pig.pNo},可在「编辑猪」中查看`, 2800);
+    } else {
+      toast("已保存", 2200);
+    }
+    // 切回 picker — 让用户继续编辑别的或看到刚加的猪
+    const editTab = $("#mineDataView")?.querySelector<HTMLElement>('.de-tab[data-de-tab="edit"]');
+    editTab?.click();
   } else {
     m.textContent = result.error || "保存失败";
     m.className = "account-form-hint error";
@@ -629,7 +655,11 @@ async function saveBreedingFromForm(): Promise<void> {
   if (result.ok) {
     m.textContent = "配种已保存,正在刷新数据...";
     m.className = "account-form-hint success";
-    await reloadData();
+    await reloadData({ silent: true });
+    toast("已添加新配种", 2400);
+    // 留在「新增配种」tab 并重置表单 — 让用户能连续添加多条配种
+    const breedingTab = $("#mineDataView")?.querySelector<HTMLElement>('.de-tab[data-de-tab="breeding"]');
+    breedingTab?.click();
   } else {
     m.textContent = result.error || "保存失败";
     m.className = "account-form-hint error";
@@ -638,10 +668,12 @@ async function saveBreedingFromForm(): Promise<void> {
 
 /** 保存成功后重新加载图鉴数据 (本地状态 + 索引重建)
  *  强制走 API 拿最新 D1 数据;API 失败时降级到本地缓存并明确提示,
- *  不让用户误以为已成功刷新。 */
-async function reloadData(): Promise<void> {
+ *  不让用户误以为已成功刷新。
+ *  silent=true 时不 toast — 由调用方根据业务语义提示具体结果(如"已新增 #123") */
+async function reloadData(opts?: { silent?: boolean }): Promise<void> {
   const result = await refreshDataFromServer();
   emit("ui-refresh", undefined);
+  if (opts?.silent) return;
   if (result.ok) {
     toast("数据已更新");
   } else {
@@ -867,7 +899,7 @@ function wirePigForm(isNew: boolean): void {
     }
   }
 
-  $("#deSaveBtn")?.addEventListener("click", () => savePigFromForm(isNew));
+  wireSaveButton("deSaveBtn", () => savePigFromForm(isNew));
   $("#deCancelBtn")?.addEventListener("click", () => {
     const body = $("#deBody");
     if (!body) return;
@@ -880,7 +912,7 @@ function wireBreedingForm(): void {
   // 可搜索单选组件
   document.querySelectorAll<HTMLElement>(".de-search-select").forEach(ss => wireSearchSelect(ss));
 
-  $("#dbSaveBtn")?.addEventListener("click", () => saveBreedingFromForm());
+  wireSaveButton("dbSaveBtn", () => saveBreedingFromForm());
   $("#dbCancelBtn")?.addEventListener("click", () => {
     const body = $("#deBody");
     if (!body) return;
