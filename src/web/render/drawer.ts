@@ -9,6 +9,7 @@ import { deriveAcquisitions, setPigOwned, setPigBadge } from "../js/data.js";
 import { customConfirm } from "../js/modal.js";
 import { BLEED_TYPE_TEXT, METHOD_LABELS } from "../js/constants.js";
 import { emit } from "../js/events.js";
+import { getCurrentUser } from "../js/auth.js";
 
 let currentDetailPNo: number | null = null;
 
@@ -25,6 +26,25 @@ async function setPigOwnedAfterConfirm(pNo: number, owned: boolean): Promise<boo
   if (!owned && p && !(await confirmCancelOwned(p))) return false;
   setPigOwned(pNo, owned);
   return true;
+}
+
+/** 软删除调用 (活动猪 / 配种) — 复用 /api/atlas/update 的 action 路由 */
+async function apiDelete(body: Record<string, unknown>): Promise<{ ok: boolean; error?: string }> {
+  const user = getCurrentUser();
+  if (!user) return { ok: false, error: "请先登录" };
+  try {
+    const res = await fetch("/api/atlas/update", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId: user.id, ...body }),
+    });
+    const data = await res.json() as { ok?: boolean; error?: string };
+    if (!res.ok || data.ok === false) return { ok: false, error: data.error || `HTTP ${res.status}` };
+    return { ok: true };
+  } catch (err) {
+    console.error("[apiDelete]", err);
+    return { ok: false, error: "网络错误,请稍后重试" };
+  }
 }
 
 function getPigByPNo(pNo: number): Pig | undefined {
@@ -58,6 +78,10 @@ export function showDetail(pNo: number): void {
     : `<button type="button" class="add-btn" id="drawerCollectBtn">⬜ 未拥有</button>`;
   const raisingBtn = `<button type="button" class="add-btn secondary" id="drawerRaisingBtn">➕ 加入养成</button>`;
   const waitingBtn = `<button type="button" class="add-btn secondary" id="drawerWaitingBtn">📦 加入等待进货</button>`;
+  // 仅活动猪显示删除按钮; 普通猪不提供删除 (业务规则)
+  const deleteBtn = isEventPig && getCurrentUser()
+    ? `<button type="button" class="add-btn danger" id="drawerDeleteBtn">🗑 删除</button>`
+    : "";
 
   const groups = deriveAcquisitions(p);
   const acqOrder = ["shop", "hunt", "hunt_event", "fail", "feed_special"];
@@ -157,7 +181,10 @@ export function showDetail(pNo: number): void {
       const p2Slot = renderParentSlot(r.any ? null : p2Info);
       const equations = (r.result || []).map(o => {
         const outSlot = renderOutcomeSlot(o.pigKind, o.prob);
-        return `<div class="equation">${p1Slot}<div class="op">+</div>${p2Slot}<div class="op">=</div>${outSlot}</div>`;
+        const p1Val = r.pNo1?.pNo ?? 0;
+        const p2Val = r.any ? "*" : (r.pNo2?.pNo ?? "");
+        const delBtn = getCurrentUser() ? `<button type="button" class="recipe-del-btn" data-parent1="${p1Val}" data-parent2="${p2Val}" data-outcome="${o.pigKind?.pNo ?? ""}" title="删除此配种">🗑</button>` : "";
+        return `<div class="equation">${p1Slot}<div class="op">+</div>${p2Slot}<div class="op">=</div>${outSlot}${delBtn}</div>`;
       }).join("");
       recipeHTML.push(`<div class="recipe"><div class="tag">${BLEED_TYPE_TEXT[String(iv)] || `isview=${iv}`}</div>${equations}</div>`);
     }
@@ -189,7 +216,9 @@ export function showDetail(pNo: number): void {
       const equations = (r.result || []).map(o => {
         const k = o.pigKind || {};
         const outSlot = renderOutcomeSlot(k, o.prob, { isSelf: k.pNo === p.pNo });
-        return `<div class="equation">${selfSlot}<div class="op">+</div>${partnerSlot}<div class="op">=</div>${outSlot}</div>`;
+        const partnerPNo = r.partner?.pNo ?? (r.any ? "*" : "");
+        const delBtn = getCurrentUser() ? `<button type="button" class="recipe-del-btn" data-parent1="${p.pNo}" data-parent2="${partnerPNo}" data-outcome="${k.pNo ?? ""}" title="删除此配种">🗑</button>` : "";
+        return `<div class="equation">${selfSlot}<div class="op">+</div>${partnerSlot}<div class="op">=</div>${outSlot}${delBtn}</div>`;
       }).join("");
       parentRecipeHTML.push(`<div class="recipe"><div class="tag">${BLEED_TYPE_TEXT[String(iv)] || `isview=${iv}`}</div>${equations}</div>`);
     }
@@ -217,7 +246,7 @@ export function showDetail(pNo: number): void {
 
   box.innerHTML = `
     <h2>#${p.pNo} ${escHtml(p.name)}</h2>
-    <div class="drawer-actions">${collectBtn}${raisingBtn}${waitingBtn}</div>
+    <div class="drawer-actions">${collectBtn}${raisingBtn}${waitingBtn}${deleteBtn}</div>
     <div class="hero">
       ${pigImg ? `<img src="${pigImg}" alt="${escHtml(p.name)}">` : ""}
       <div class="info">
@@ -254,6 +283,52 @@ export function showDetail(pNo: number): void {
   if (rbtn) rbtn.addEventListener("click", () => emit("add-raising", { pNo: p.pNo }));
   const wbtn = document.getElementById("drawerWaitingBtn");
   if (wbtn) wbtn.addEventListener("click", () => emit("add-raising", { pNo: p.pNo, status: "waiting" }));
+
+  // 活动猪软删除 — status='removed', 后端校验 special=1
+  const dbtn = document.getElementById("drawerDeleteBtn");
+  if (dbtn) {
+    dbtn.addEventListener("click", async () => {
+      if (!(await customConfirm(
+        `确定要软删除「${escHtml(p.name)}」吗？`,
+        "该操作会标记为 status='removed',前端不会加载。你可在管理界面恢复。"
+      ))) return;
+      const result = await apiDelete({ action: "deletePig", pig: { pNo: p.pNo } });
+      if (result.ok) {
+        toast(`已删除: ${p.name}`);
+        closeDrawer();
+        emit("ui-refresh", undefined);
+      } else {
+        toast(result.error || "删除失败", 3200);
+      }
+    });
+  }
+
+  // 配种每行 “🗑” 删除 — 仅按钮所在的那条 outcome 被删除,其他同组产出保留
+  document.querySelectorAll<HTMLElement>(".recipe-del-btn").forEach(btn => {
+    btn.addEventListener("click", async (ev) => {
+      ev.stopPropagation();
+      const parent1 = Number(btn.dataset.parent1);
+      const parent2Raw = btn.dataset.parent2;
+      const parent2 = parent2Raw === "*" ? -1 : Number(parent2Raw);
+      const outcomePNo = Number(btn.dataset.outcome);
+      if (!parent1 || !outcomePNo) return;
+      if (!(await customConfirm(
+        `确定要删除这条配种记录吗？`,
+        `(${parent1}, ${parent2Raw}, ${outcomePNo})`
+      ))) return;
+      const result = await apiDelete({
+        action: "deleteBreeding",
+        breeding: { parent1, parent2: parent2Raw === "*" ? "*" : parent2, outcomePNo },
+      });
+      if (result.ok) {
+        toast("配种已删除");
+        emit("ui-refresh", undefined);
+        showDetail(p.pNo); // 重渲染抽屉
+      } else {
+        toast(result.error || "删除失败", 3200);
+      }
+    });
+  });
 
   $("#drawer")?.classList.add("open");
   $("#drawerBg")?.classList.add("open");

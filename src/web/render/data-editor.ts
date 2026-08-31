@@ -13,6 +13,7 @@ import { getCurrentUser } from "../js/auth.js";
 import { refreshDataFromServer } from "../js/data.js";
 import { emit } from "../js/events.js";
 import { COLOR_TEXT, HUNT_SITES, FEED_LABELS } from "../js/constants.js";
+import { customConfirm } from "../js/modal.js";
 
 // ---------- 小工具 ----------
 
@@ -406,6 +407,25 @@ async function apiSave(body: Record<string, unknown>): Promise<{ ok: boolean; er
     return { ok: true, pig: data.pig, breeding: data.breeding };
   } catch (err) {
     console.error("[apiSave]", err);
+    return { ok: false, error: "网络错误,请稍后重试" };
+  }
+}
+
+/** 软删除调用 (活动猪 / 配种) — 复用 /api/atlas/update 的 action 路由 */
+async function apiDelete(body: Record<string, unknown>): Promise<{ ok: boolean; error?: string }> {
+  const user = getCurrentUser();
+  if (!user) return { ok: false, error: "请先登录" };
+  try {
+    const res = await fetch("/api/atlas/update", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId: user.id, ...body }),
+    });
+    const data = await res.json() as { ok?: boolean; error?: string };
+    if (!res.ok || data.ok === false) return { ok: false, error: data.error || `HTTP ${res.status}` };
+    return { ok: true };
+  } catch (err) {
+    console.error("[apiDelete]", err);
     return { ok: false, error: "网络错误,请稍后重试" };
   }
 }
@@ -948,10 +968,15 @@ const PICKER_PAGE_SIZE = 60;
 
 /** 构造一行猪 picker 项的 HTML */
 function pickerItemHTML(p: Pig): string {
+  const isEvent = state.eventPigsById.has(p.pNo);
+  const delBtn = isEvent && getCurrentUser()
+    ? `<span class="de-pig-del" data-pno="${p.pNo}" role="button" title="软删除">🗑</span>`
+    : "";
   return `<button type="button" class="de-pig-item" data-pno="${p.pNo}">
     <span class="de-pig-no">#${p.pNo}</span>
     <span class="de-pig-name">${esc(p.name)}</span>
     <span class="de-pig-rare">${"★".repeat(Math.max(1, Math.min(6, p.rare)))}</span>
+    ${delBtn}
   </button>`;
 }
 
@@ -1009,10 +1034,36 @@ function wirePigPicker(): void {
   }
 
   // 行点击 — 事件委托 (避免给每行都 addEventListener)
-  list.addEventListener("click", (ev) => {
-    const target = (ev.target as HTMLElement).closest<HTMLElement>(".de-pig-item");
-    if (!target) return;
-    const pNo = Number(target.dataset.pno || 0);
+  list.addEventListener("click", async (ev) => {
+    const target = ev.target as HTMLElement;
+
+    // 1. 删除按钮 — 优先检查 (避免冒泡到行点击)
+    const delEl = target.closest<HTMLElement>(".de-pig-del");
+    if (delEl) {
+      ev.stopPropagation();
+      ev.preventDefault();
+      const pNo = Number(delEl.dataset.pno || 0);
+      const p = state.pigsById.get(pNo) || state.eventPigsById.get(pNo);
+      if (!p) return;
+      if (!(await customConfirm(
+        `确定要软删除「${esc(p.name)}」吗？`,
+        "该操作会标记为 status='removed',前端不再加载。"
+      ))) return;
+      const result = await apiDelete({ action: "deletePig", pig: { pNo } });
+      if (result.ok) {
+        toast(`已删除: ${p.name}`);
+        enterPagedMode(); // 重渲染 picker (已删的猪不进 state)
+        emit("ui-refresh", undefined);
+      } else {
+        toast(result.error || "删除失败", 3200);
+      }
+      return;
+    }
+
+    // 2. 行点击 → 打开编辑表单
+    const item = target.closest<HTMLElement>(".de-pig-item");
+    if (!item) return;
+    const pNo = Number(item.dataset.pno || 0);
     const p = state.pigsById.get(pNo) || state.eventPigsById.get(pNo) || state.hiddenPigsById.get(pNo);
     if (!p) return;
     const body = $("#deBody");

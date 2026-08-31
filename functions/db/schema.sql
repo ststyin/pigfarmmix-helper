@@ -42,6 +42,9 @@ CREATE TABLE IF NOT EXISTS pigs (
 CREATE INDEX IF NOT EXISTS idx_pigs_atlas ON pigs (atlas_type, atlas_index);
 CREATE INDEX IF NOT EXISTS idx_pigs_status ON pigs (status);
 
+-- 软删除索引 (查询默认带 WHERE deleted=0)
+CREATE INDEX IF NOT EXISTS idx_pigs_active_deleted ON pigs (status, special);
+
 -- 配种表
 CREATE TABLE IF NOT EXISTS breeding (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -50,11 +53,15 @@ CREATE TABLE IF NOT EXISTS breeding (
   outcome_p_no  INTEGER NOT NULL,             -- 产出猪 pNo
   outcome_prob  REAL NOT NULL DEFAULT 0,      -- 产出概率 (%)
   visible    INTEGER NOT NULL DEFAULT 0,      -- 是否公开可见
-  updated_at INTEGER NOT NULL DEFAULT 0
+  updated_at INTEGER NOT NULL DEFAULT 0,
+  deleted    INTEGER NOT NULL DEFAULT 0,      -- 软删除: 0=正常 1=已删
+  deleted_at INTEGER,                          -- 删除时间戳
+  deleted_by TEXT                              -- 删除人 userId
 );
 
 CREATE INDEX IF NOT EXISTS idx_breeding_parents ON breeding (parent1, parent2);
 CREATE INDEX IF NOT EXISTS idx_breeding_outcome ON breeding (outcome_p_no);
+CREATE INDEX IF NOT EXISTS idx_breeding_deleted ON breeding (deleted);
 -- (parent1, parent2, outcome_p_no) 唯一 — 同一对父母 + 同一产出只允许一条记录
 -- 防重复提交; 重复 INSERT 会触发 ON CONFLICT → UPSERT
 CREATE UNIQUE INDEX IF NOT EXISTS idx_breeding_unique ON breeding (parent1, parent2, outcome_p_no);

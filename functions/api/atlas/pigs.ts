@@ -88,7 +88,7 @@ export async function onRequestGet(context: { env: { DB: D1Database } }): Promis
         LEFT JOIN users u ON p.updated_by = u.id
         ORDER BY p.p_no
       `).all(),
-      db.prepare("SELECT * FROM breeding ORDER BY id").all(),
+      db.prepare("SELECT * FROM breeding WHERE deleted = 0 ORDER BY id").all(),
     ]);
 
     const pigs: Pig[] = (pigsResult.results || []).map(rowToPig);

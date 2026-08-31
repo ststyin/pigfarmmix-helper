@@ -205,6 +205,40 @@ export async function onRequestPost(context: { request: Request; env: Env }): Pr
   const results: Record<string, unknown> = { ok: true };
 
   try {
+    // 动作路由: 软删除 (仅写 status / deleted, 不动其他字段)
+    if (body.action === "deletePig" && (body.pig as { pNo?: unknown })?.pNo) {
+      const pNo = Number((body.pig as { pNo: unknown }).pNo);
+      const row = await db.prepare("SELECT special FROM pigs WHERE p_no = ? LIMIT 1").bind(pNo).first<{ special: number }>();
+      if (!row) return badRequest("猪不存在");
+      // 业务规则: 仅活动猪 (special=1) 可软删除
+      if (!row.special) return badRequest("普通猪不能删除 (仅允许活动猪)");
+      const now = Date.now();
+      await db.prepare("UPDATE pigs SET status = 'removed', updated_at = ?, updated_by = ? WHERE p_no = ?")
+        .bind(now, userId, pNo).run();
+      results.deleted = { type: "pig", pNo };
+      return jsonResponse(results);
+    }
+
+    if (body.action === "deleteBreeding" && body.breeding) {
+      const { parent1, parent2, outcomePNo } = body.breeding as {
+        parent1: unknown; parent2: unknown; outcomePNo: unknown;
+      };
+      const p1 = Number(parent1);
+      const p2Val = parent2 === "*" || parent2 === -1 ? -1 : Number(parent2);
+      const op = Number(outcomePNo);
+      if (!p1 || p1 <= 0) return badRequest("parent1 无效");
+      if (p2Val !== -1 && (!p2Val || p2Val <= 0)) return badRequest("parent2 无效");
+      if (!op || op <= 0) return badRequest("outcomePNo 无效");
+      const now = Date.now();
+      const result = await db.prepare(`
+        UPDATE breeding SET deleted = 1, deleted_at = ?, deleted_by = ?
+        WHERE parent1 = ? AND parent2 = ? AND outcome_p_no = ? AND deleted = 0
+      `).bind(now, userId, p1, p2Val, op).run();
+      if (!result.meta || result.meta.changes === 0) return badRequest("配种记录不存在或已删除");
+      results.deleted = { type: "breeding", parent1: p1, parent2: p2Val, outcomePNo: op };
+      return jsonResponse(results);
+    }
+
     if (body.pig) {
       const saved = await savePig(db, body, userId);
       if (!saved) return badRequest("猪数据无效");
