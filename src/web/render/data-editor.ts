@@ -713,7 +713,8 @@ async function savePigFromForm(isNew: boolean): Promise<void> {
   }
 }
 
-async function saveBreedingFromForm(): Promise<void> {
+export async function saveBreedingFromForm(): Promise<void> {
+
   const p1raw = getSearchSelectValue("dbParent1");
   const p2raw = getSearchSelectValue("dbParent2");
   const p1 = Number(p1raw);
@@ -730,9 +731,9 @@ async function saveBreedingFromForm(): Promise<void> {
     const ss = row.querySelector<HTMLElement>(".de-search-select");
     const pNo = Number(ss?.getAttribute("data-ss-value") || 0);
     const probText = (row.querySelector(".de-outcome-prob") as HTMLInputElement | null)?.value || "";
-    // 概率留空 = 1.0 (100%) — 活动猪配种默认值,避免用户被罚填不必要的数据
-    const prob = probText === "" ? 1.0 : Number(probText);
-    if (pNo > 0) outcomes.push({ pNo, prob: Number.isFinite(prob) ? Math.max(0, prob) : 1.0 });
+    // 概率留空 = 100 — 与种子数据 (60/100) 同单位 (百分比), 抽屉显示为 ${prob}%
+    const prob = probText === "" ? 100 : Number(probText);
+    if (pNo > 0) outcomes.push({ pNo, prob: Number.isFinite(prob) ? Math.max(0, prob) : 100 });
   });
 
   if (outcomes.length === 0) {
