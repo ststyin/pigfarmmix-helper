@@ -1073,22 +1073,32 @@ function wireBreedingForm(): void {
   const rows = $("#dbOutcomeRows");
   if (addBtn && rows) {
     addBtn.addEventListener("click", () => {
-      const row = document.createElement("div");
-      row.className = "de-outcome-row";
-      row.innerHTML = `
-        <div class="de-outcome-select-wrap">
-          ${searchSelectHTML("", "", pigSearchOptions(), "", "搜索 pNo / 名称...")}
-        </div>
-        <input type="number" class="de-outcome-prob" placeholder="概率 %" min="0" step="any">
-        <button type="button" class="de-outcome-del" title="删除此行">✕</button>
-      `;
-      rows.appendChild(row);
-      wireOutcomeRow(row);
+      rows.appendChild(addOutcomeRow());
     });
   }
 
   // 已存在的行绑定删除
   rows?.querySelectorAll<HTMLElement>(".de-outcome-row").forEach(row => wireOutcomeRow(row));
+}
+
+/** 模块级产出 id 序号 — 保证多次表单销毁/重建能生成唯一 id */
+let outcomeRowSeq = 0;
+
+/** 添加一条产出行 (独立函数, 可测)
+ *  返回的就是 wire/挂到 #dbOutcomeRows 后的 DOM 元素 (已 wire 好事件) */
+export function addOutcomeRow(): HTMLElement {
+  const newId = `dbOutcome${++outcomeRowSeq}`;
+  const row = document.createElement("div");
+  row.className = "de-outcome-row";
+  row.innerHTML = `
+    <div class="de-outcome-select-wrap">
+      ${searchSelectHTML(newId, "", pigSearchOptions(), "", "搜索 pNo / 名称...")}
+    </div>
+    <input type="number" class="de-outcome-prob" placeholder="概率 %" min="0" step="any">
+    <button type="button" class="de-outcome-del" title="删除此行">✕</button>
+  `;
+  wireOutcomeRow(row);
+  return row;
 }
 
 function wireOutcomeRow(row: HTMLElement): void {
