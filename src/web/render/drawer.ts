@@ -291,10 +291,7 @@ export function showDetail(pNo: number): void {
   const dbtn = document.getElementById("drawerDeleteBtn");
   if (dbtn) {
     dbtn.addEventListener("click", async () => {
-      if (!(await customConfirm(
-        `确定要软删除「${escHtml(p.name)}」吗？`,
-        "该操作会标记为 status='removed',前端不会加载。你可在管理界面恢复。"
-      ))) return;
+      if (!(await customConfirm(`确定要软删除「${escHtml(p.name)}」吗？`))) return;
       const result = await apiDelete({ action: "deletePig", pig: { pNo: p.pNo } });
       if (result.ok) {
         toast(`已删除: ${p.name}`);
