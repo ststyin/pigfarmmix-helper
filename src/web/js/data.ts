@@ -323,41 +323,35 @@ export function pigMatchesHunt(pig: Pig, region: string, ticket: string): boolea
 export interface LoadDataOptions {
   /**
    * 强制只走 API,失败抛错。
-   * 用于编辑保存后的刷新 — 避免拿到 IndexedDB 里的旧缓存。
-   * 默认 false: API → IndexedDB → JSON 兜底,失败静默降级。
+   * 用于「手动刷新按钮」「数据编辑保存后」 — 必须拿到服务端最新数据,不能让旧缓存蒙混过关。
+   * 默认 false: 仅使用本地数据 (IndexedDB → JSON 兜底),不打 API。
    */
   force?: boolean;
 }
 
-/** 主加载入口: API → IndexedDB → JSON 兜底 */
+/** 主加载入口
+ *  - 默认 (force=false): IndexedDB → JSON 兜底,不打 API。应用启动时直接拿本地数据。
+ *  - force=true:           强制只走 API,失败抛错。手动刷新 / 编辑保存后使用。
+ */
 export async function loadData(opts: LoadDataOptions = {}): Promise<void> {
   let bundle: PigDataBundle | null = null;
-  let apiOk = false;
 
-  // 1) API 优先 (最新的 D1 数据)
-  try {
+  if (opts.force) {
+    // 强制模式: 只走 API,失败抛错。手动刷新按钮 / 编辑保存后使用。
     const apiBundle = await loadFromApi();
-    if (apiBundle) {
-      bundle = apiBundle;
-      cacheBundle(apiBundle).catch(() => {});
-      apiOk = true;
+    if (!apiBundle) {
+      throw new Error("无法从服务器获取最新数据,请检查网络后重试");
     }
-  } catch { /* fall through */ }
-
-  // 强制模式: API 拿不到就直接抛错,不让旧缓存蒙混过关
-  if (opts.force && !apiOk) {
-    throw new Error("无法从服务器获取最新数据,请检查网络后重试");
-  }
-
-  // 2) IndexedDB 缓存兜底 (离线 / API 失败)
-  if (!bundle) {
+    bundle = apiBundle;
+    cacheBundle(apiBundle).catch(() => {});
+  } else {
+    // 默认模式: 仅使用本地数据 (IndexedDB → JSON 兜底),不打 API。
+    // 应用打开时不连服务器;服务器拉取由「手动刷新」按钮显式触发。
     bundle = await loadCachedBundle();
-  }
-
-  // 3) JSON 兜底 (首次加载且无缓存)
-  if (!bundle) {
-    bundle = await loadFromJson();
-    cacheBundle(bundle).catch(() => {});
+    if (!bundle) {
+      bundle = await loadFromJson();
+      cacheBundle(bundle).catch(() => {});
+    }
   }
 
   // 处理数据
@@ -416,7 +410,7 @@ export async function refreshDataFromServer(): Promise<{ ok: boolean; error?: st
     console.warn("[refresh] force reload from API failed:", err);
   }
 
-  // 2) API 拿不到 → 用本地缓存兜底
+  // 2) API 拿不到 → 用本地数据兜底 (loadData 默认不打 API,IndexedDB → JSON)
   try {
     await loadData();
     return { ok: false, error: `服务器刷新失败 · 当前显示本地数据 (${apiErr})` };
