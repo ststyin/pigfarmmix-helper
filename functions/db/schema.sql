@@ -55,6 +55,9 @@ CREATE TABLE IF NOT EXISTS breeding (
 
 CREATE INDEX IF NOT EXISTS idx_breeding_parents ON breeding (parent1, parent2);
 CREATE INDEX IF NOT EXISTS idx_breeding_outcome ON breeding (outcome_p_no);
+-- (parent1, parent2, outcome_p_no) 唯一 — 同一对父母 + 同一产出只允许一条记录
+-- 防重复提交; 重复 INSERT 会触发 ON CONFLICT → UPSERT
+CREATE UNIQUE INDEX IF NOT EXISTS idx_breeding_unique ON breeding (parent1, parent2, outcome_p_no);
 
 -- ---------- 用户 / 同步 (沿用原 schema) ----------
 

@@ -180,6 +180,10 @@ async function addBreeding(db: D1Database, body: Record<string, unknown>): Promi
     db.prepare(`
       INSERT INTO breeding (parent1, parent2, outcome_p_no, outcome_prob, visible, updated_at)
       VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(parent1, parent2, outcome_p_no) DO UPDATE SET
+        outcome_prob = excluded.outcome_prob,
+        visible = excluded.visible,
+        updated_at = excluded.updated_at
     `).bind(p1, p2, o.pNo, o.prob, visible, now)
   );
 

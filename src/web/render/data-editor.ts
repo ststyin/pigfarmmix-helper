@@ -639,8 +639,9 @@ async function saveBreedingFromForm(): Promise<void> {
     const ss = row.querySelector<HTMLElement>(".de-search-select");
     const pNo = Number(ss?.getAttribute("data-ss-value") || 0);
     const probText = (row.querySelector(".de-outcome-prob") as HTMLInputElement | null)?.value || "";
-    const prob = Number(probText);
-    if (pNo > 0) outcomes.push({ pNo, prob: Number.isFinite(prob) ? prob : 0 });
+    // 概率留空 = 1.0 (100%) — 活动猪配种默认值,避免用户被罚填不必要的数据
+    const prob = probText === "" ? 1.0 : Number(probText);
+    if (pNo > 0) outcomes.push({ pNo, prob: Number.isFinite(prob) ? Math.max(0, prob) : 1.0 });
   });
 
   if (outcomes.length === 0) {
