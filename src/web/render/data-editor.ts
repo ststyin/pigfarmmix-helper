@@ -872,49 +872,93 @@ export function renderDataView(): void {
 }
 
 function renderPigPicker(): string {
-  const pigs = [...state.pigsById.values(), ...state.eventPigsById.values()]
-    .sort((a, b) => a.pNo - b.pNo);
+  // 仅渲染容器与搜索框; 列表行由 wirePigPicker 分块注入,避免 660 个 button 同时出现在 DOM
   return `
     <div class="de-picker">
       <input type="search" id="dePigSearch" class="search" placeholder="搜索 pNo / 名称...">
-      <div class="de-pig-list" id="dePigList">
-        ${pigs.map(p => `
-          <button type="button" class="de-pig-item" data-pno="${p.pNo}">
-            <span class="de-pig-no">#${p.pNo}</span>
-            <span class="de-pig-name">${esc(p.name)}</span>
-            <span class="de-pig-rare">${"★".repeat(Math.max(1, Math.min(6, p.rare)))}</span>
-          </button>
-        `).join("")}
-      </div>
+      <div class="de-pig-list" id="dePigList"><!-- 行由 wirePigPicker JS 注入 --></div>
     </div>
   `;
+}
+
+const PICKER_PAGE_SIZE = 60;
+
+/** 构造一行猪 picker 项的 HTML */
+function pickerItemHTML(p: Pig): string {
+  return `<button type="button" class="de-pig-item" data-pno="${p.pNo}">
+    <span class="de-pig-no">#${p.pNo}</span>
+    <span class="de-pig-name">${esc(p.name)}</span>
+    <span class="de-pig-rare">${"★".repeat(Math.max(1, Math.min(6, p.rare)))}</span>
+  </button>`;
 }
 
 function wirePigPicker(): void {
   const search = $("#dePigSearch") as HTMLInputElement | null;
   const list = $("#dePigList");
   if (!list) return;
+
+  const allPigs: Pig[] = [...state.pigsById.values(), ...state.eventPigsById.values()]
+    .sort((a, b) => a.pNo - b.pNo);
+
+  // 模式: 'paged' (默认, 分块渲染) / 'filtered' (搜索中, 全渲染过滤后列表)
+  let mode: "paged" | "filtered" = "paged";
+  let shown = 0;  // paged 模式下已渲染的行数
+
+  const renderChunk = (start: number, end: number): void => {
+    list.insertAdjacentHTML("beforeend", allPigs.slice(start, end).map(pickerItemHTML).join(""));
+  };
+
+  const enterPagedMode = (): void => {
+    mode = "paged";
+    list.innerHTML = "";
+    shown = Math.min(PICKER_PAGE_SIZE, allPigs.length);
+    renderChunk(0, shown);
+    list.scrollTop = 0;
+  };
+
+  // 滚到底部 → 追加下一批
+  list.addEventListener("scroll", () => {
+    if (mode !== "paged") return;
+    if (shown >= allPigs.length) return;
+    // 距底部 100px 触发加载
+    if (list.scrollTop + list.clientHeight >= list.scrollHeight - 100) {
+      const next = Math.min(shown + PICKER_PAGE_SIZE, allPigs.length);
+      renderChunk(shown, next);
+      shown = next;
+    }
+  }, { passive: true });
+
+  // 搜索过滤
   if (search) {
     search.addEventListener("input", () => {
       const q = search.value.trim().toLowerCase();
-      list.querySelectorAll<HTMLElement>(".de-pig-item").forEach(item => {
-        const no = item.dataset.pno || "";
-        const name = item.querySelector(".de-pig-name")?.textContent || "";
-        item.style.display = (!q || no.includes(q) || name.toLowerCase().includes(q)) ? "" : "none";
-      });
+      if (!q) {
+        enterPagedMode();
+        return;
+      }
+      mode = "filtered";
+      const filtered = allPigs.filter(p =>
+        String(p.pNo).includes(q) || p.name.toLowerCase().includes(q)
+      );
+      list.innerHTML = filtered.map(pickerItemHTML).join("");
+      list.scrollTop = 0;
     });
   }
-  list.querySelectorAll<HTMLElement>(".de-pig-item").forEach(item => {
-    item.addEventListener("click", () => {
-      const pNo = Number(item.dataset.pno || 0);
-      const p = state.pigsById.get(pNo) || state.eventPigsById.get(pNo) || state.hiddenPigsById.get(pNo);
-      if (!p) return;
-      const body = $("#deBody");
-      if (!body) return;
-      body.innerHTML = pigFormHTML(p);
-      wirePigForm(false);
-    });
+
+  // 行点击 — 事件委托 (避免给每行都 addEventListener)
+  list.addEventListener("click", (ev) => {
+    const target = (ev.target as HTMLElement).closest<HTMLElement>(".de-pig-item");
+    if (!target) return;
+    const pNo = Number(target.dataset.pno || 0);
+    const p = state.pigsById.get(pNo) || state.eventPigsById.get(pNo) || state.hiddenPigsById.get(pNo);
+    if (!p) return;
+    const body = $("#deBody");
+    if (!body) return;
+    body.innerHTML = pigFormHTML(p);
+    wirePigForm(false);
   });
+
+  enterPagedMode();
 }
 
 function wirePigForm(isNew: boolean): void {
