@@ -125,6 +125,7 @@
       padding: 0;
       touch-action: pan-y;
       -webkit-tap-highlight-color: transparent;
+      overflow-x: hidden;
     }
 
     html {
@@ -2480,7 +2481,7 @@
       background: var(--card);
       padding: 14px;
       border-radius: 14px;
-      border: 1px solid var(--border);
+      box-shadow: 0 0 0 1px var(--border);  /* 不占 width, 与 .drawer-actions 内容对齐 */
     }
 
     .drawer .hero img {
