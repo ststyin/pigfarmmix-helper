@@ -8,18 +8,16 @@
 
 import type { Pig, PigAcquisition, PigFeeding, BreedingGuide } from "../js/types/index.js";
 import { state } from "../js/state.js";
-import { $ } from "../js/utils.js";
+import { $, escHtml, toast } from "../js/utils.js";
 import { getCurrentUser } from "../js/auth.js";
-import { toast } from "../js/utils.js";
 import { refreshDataFromServer } from "../js/data.js";
 import { emit } from "../js/events.js";
 import { COLOR_TEXT, HUNT_SITES, FEED_LABELS } from "../js/constants.js";
 
 // ---------- 小工具 ----------
 
-function esc(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-}
+// 复用 utils.escHtml — 完整版 (额外转 '), 避免重复实现; 保留本地别名 esc 以不破坏 16+ 调用点
+const esc = escHtml;
 
 function fieldHTML(id: string, label: string, value: string, opts: { type?: string; placeholder?: string; hint?: string } = {}): string {
   const { type = "text", placeholder = "", hint = "" } = opts;
@@ -341,6 +339,9 @@ function pigFormHTML(p: Pig | null): string {
     <details class="de-advanced">
       <summary>高级 (JSON 原始字段)</summary>
       <div class="de-advanced-body">
+        <div class="de-hint" style="margin-bottom: 6px;">
+          填写 JSON = 完全替换该字段(忽略上方友好字段) · 留空 = 使用上方友好字段
+        </div>
         ${fieldHTML("deAcquisitionJSON", "获取途径 JSON", isNew ? "" : p?.acquisition ? JSON.stringify(p.acquisition) : "", { placeholder: '{"shop": [0.1, 0, 0]}' })}
         ${fieldHTML("deFeedingJSON", "喂食 JSON", isNew ? "" : p?.feeding ? JSON.stringify(p.feeding) : "", { placeholder: '{"interval": 8, "times": 3, "picky": []}' })}
         ${fieldHTML("deBreedingGuideJSON", "养成指南 JSON", isNew ? "" : p?.breedingGuide ? JSON.stringify(p.breedingGuide) : "", { placeholder: '{"requirements": "...", "tips": "..."}' })}
