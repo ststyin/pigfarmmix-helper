@@ -375,7 +375,7 @@ function breedingFormHTML(): string {
         <div class="de-outcome-select-wrap">
           ${searchSelectHTML("dbOutcome0", "", options, "", "搜索 pNo / 名称...")}
         </div>
-        <input type="number" class="de-outcome-prob" placeholder="概率 %" min="0" step="any">
+        <input type="number" class="de-outcome-prob" placeholder="概率 %" min="0" step="any" value="100">
         <button type="button" class="de-outcome-del" title="删除此行">✕</button>
       </div>
     </div>
@@ -1057,7 +1057,8 @@ function wirePigForm(isNew: boolean): void {
 }
 
 function wireBreedingForm(): void {
-  // 可搜索单选组件
+  // 可搜索单选组件 — 初始行的 search select 统一在这里 wire; 不要重复调 wireOutcomeRow
+  // (重复会导致同一个 toggle 绑两个 click handler: A 打开 → B 看到已开 → 关闭, 视觉上“按不动”)
   document.querySelectorAll<HTMLElement>(".de-search-select").forEach(ss => wireSearchSelect(ss));
 
   wireSaveButton("dbSaveBtn", () => saveBreedingFromForm());
@@ -1077,8 +1078,11 @@ function wireBreedingForm(): void {
     });
   }
 
-  // 已存在的行绑定删除
-  rows?.querySelectorAll<HTMLElement>(".de-outcome-row").forEach(row => wireOutcomeRow(row));
+  // 初始产出行: 仅绑删除按钮 (search select 已在上面统一 wire 过)
+  rows?.querySelectorAll<HTMLElement>(".de-outcome-row").forEach(row => {
+    const del = row.querySelector<HTMLElement>(".de-outcome-del");
+    if (del) del.addEventListener("click", () => row.remove());
+  });
 }
 
 /** 模块级产出 id 序号 — 保证多次表单销毁/重建能生成唯一 id */
@@ -1094,7 +1098,7 @@ export function addOutcomeRow(): HTMLElement {
     <div class="de-outcome-select-wrap">
       ${searchSelectHTML(newId, "", pigSearchOptions(), "", "搜索 pNo / 名称...")}
     </div>
-    <input type="number" class="de-outcome-prob" placeholder="概率 %" min="0" step="any">
+    <input type="number" class="de-outcome-prob" placeholder="概率 %" min="0" step="any" value="100">
     <button type="button" class="de-outcome-del" title="删除此行">✕</button>
   `;
   wireOutcomeRow(row);

@@ -8,7 +8,7 @@
 
 const swScope: any = globalThis;
 const swSelf: any = swScope;
-const CACHE = "pigfarm-v113";
+const CACHE = "pigfarm-v114";
 
 // 暴露版本号给主线程
 swSelf.addEventListener("message", (e: any) => {
