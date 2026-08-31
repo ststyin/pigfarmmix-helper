@@ -4,7 +4,7 @@
 
 import type { Pig } from "../js/types/index.js";
 import { state } from "../js/state.js";
-import { $, escHtml, imgUrl, stars, badgeMetaHTML, feedIntervalText, pigPicky, toast } from "../js/utils.js";
+import { $, escHtml, imgUrl, stars, badgeMetaHTML, feedIntervalText, pigPicky, toast, handleAuthFailure } from "../js/utils.js";
 import { deriveAcquisitions, setPigOwned, setPigBadge } from "../js/data.js";
 import { customConfirm } from "../js/modal.js";
 import { BLEED_TYPE_TEXT, METHOD_LABELS } from "../js/constants.js";
@@ -39,6 +39,10 @@ async function apiDelete(body: Record<string, unknown>): Promise<{ ok: boolean; 
       body: JSON.stringify({ userId: user.id, ...body }),
     });
     const data = await res.json() as { ok?: boolean; error?: string };
+    if (res.status === 401) {
+      handleAuthFailure();
+      return { ok: false, error: "请先登录" };
+    }
     if (!res.ok || data.ok === false) return { ok: false, error: data.error || `HTTP ${res.status}` };
     return { ok: true };
   } catch (err) {

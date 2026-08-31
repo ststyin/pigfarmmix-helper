@@ -8,7 +8,7 @@
 
 import type { Pig, PigAcquisition, PigFeeding, BreedingGuide } from "../js/types/index.js";
 import { state } from "../js/state.js";
-import { $, escHtml, toast } from "../js/utils.js";
+import { $, escHtml, toast, handleAuthFailure } from "../js/utils.js";
 import { getCurrentUser } from "../js/auth.js";
 import { refreshDataFromServer } from "../js/data.js";
 import { emit } from "../js/events.js";
@@ -400,6 +400,10 @@ async function apiSave(body: Record<string, unknown>): Promise<{ ok: boolean; er
       body: JSON.stringify({ userId: user.id, ...body }),
     });
     const data = await res.json() as { ok?: boolean; error?: string; pig?: { pNo: number }; breeding?: boolean };
+    if (res.status === 401) {
+      handleAuthFailure();
+      return { ok: false, error: "请先登录" };
+    }
     if (!res.ok || data.ok === false) {
       return { ok: false, error: data.error || `HTTP ${res.status}` };
     }

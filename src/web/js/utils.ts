@@ -49,6 +49,18 @@ export function toast(msg: string, ms: number = 1800): void {
   _toastTimer = setTimeout(() => t.classList.remove("show"), ms);
 }
 
+/** 鉴权失败 (401) 统一处理 — 提示并跳到「我的」tab 引导重登
+ *  用于老用户(没设过 session cookie)调用需要鉴权的 API 时
+ *  清除 localStorage user: 避免页面以为已登录,但操作全部 401 */
+export function handleAuthFailure(): void {
+  // 1. 清除 localStorage 里的 user (cookie 没了, 旧 user 也不该信任)
+  try { localStorage.removeItem("pigfarm_user"); } catch { /* ignore */ }
+  // 2. 切到「我的」tab, 让用户看到登录面板
+  (document.getElementById("tabBtnMine") as HTMLElement | null)?.click();
+  // 3. 提示
+  toast("登录已过期,请重新登录", 3000);
+}
+
 /** HTML 转义 */
 export function escHtml(s: unknown): string {
   if (s == null) return "";
