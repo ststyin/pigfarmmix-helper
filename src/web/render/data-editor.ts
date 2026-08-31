@@ -501,20 +501,35 @@ function stringArraysEqual(a: readonly string[], b: readonly string[]): boolean 
   return true;
 }
 
-/** 从友好字段构建 acquisition 对象 (与基线对比,仅输出变更字段)
- *  - 新增 (base=undefined): 只要填了值就输出
- *  - 编辑: 与 base?.X 逐字段对比,差异才输出
- *  - 返回空对象表示本次未做任何改动 → 上层不发送该 key → 后端 partial merge 保留原值
+/** 从友好字段构建 acquisition 对象
+ *
+ *  后端 SQL 是「整列替换或保留」(`CASE WHEN excluded.X IS NULL THEN ...`),
+ *  不会做字段级合并,因此这里必须浅合并 base 后覆盖变更字段,
+ *  否则改了子字段 (e.g. hunt.sites) 会把父字段下其他未变更子字段 (e.g. hunt.prob) 一起刷掉。
+ *
+ *  - 新增 (isNew=true): 从 form 构建,hunt (只有 sites) + specialFeeding 总是输出
+ *  - 编辑 (isNew=false): 浅合并 base,只覆盖 form 改了的部分;无变更返回 undefined
+ *    → caller 不发送该 key → 后端保留原列值
  */
-function buildAcquisition(base: PigAcquisition | undefined, isNew: boolean): PigAcquisition {
-  const a: PigAcquisition = {};
+export function buildAcquisition(base: PigAcquisition | undefined, isNew: boolean): PigAcquisition | undefined {
+  if (isNew) {
+    const a: PigAcquisition = {};
+    const sites = getMultiSelectValues("deHuntSites");
+    if (sites.length) a.hunt = { sites };
+    const sf = ($("#deSpecialFeeding") as HTMLInputElement | null)?.checked ?? false;
+    a.specialFeeding = sf; // 新建场景总是带上,默认 false
+    return a;
+  }
 
-  // 商店 — 仅编辑模式显示。三个槽位独立处理:
-  //   用户填了某槽 → 该槽用 form 值; 未填 (null) → 保留 base 在该槽的值
-  //   三个槽都跟 base 一致 → 不输出 shop
-  //   任一槽 form 有填且与 base 不同 → 输出完整 [a, b, c] (未填的槽用 base 的值填上)
-  if (!isNew) {
-    const shopInputs: [number | null, number | null, number | null] = [
+  // 编辑: 浅合并 base, 只覆盖变更字段
+  let changed = false;
+  const a: PigAcquisition = { ...(base || {}) };
+
+  // 商店 — 三槽独立处理:
+  //   用户填了某槽 → 该槽用 form 值 / 100; 未填 (null) → 保留 base 的值
+  //   任一槽与 base 不同 → 写完整 shop = [a, b, c] (其余槽位填 base 的值)
+  {
+    const formShop: [number | null, number | null, number | null] = [
       numOrNull(val("#deShopA")),
       numOrNull(val("#deShopB")),
       numOrNull(val("#deShopC")),
@@ -522,58 +537,98 @@ function buildAcquisition(base: PigAcquisition | undefined, isNew: boolean): Pig
     const origShop: [number, number, number] = base?.shop
       ? [base.shop[0] ?? 0, base.shop[1] ?? 0, base.shop[2] ?? 0]
       : [0, 0, 0];
-    let shopChanged = false;
-    const merged: [number, number, number] = [0, 0, 0];
-    for (let i = 0; i < 3; i++) {
-      const formVal = shopInputs[i];
-      const origVal = origShop[i];
-      const finalVal = formVal != null ? formVal / 100 : origVal;
-      merged[i] = finalVal;
-      if (formVal != null && Math.abs(finalVal - origVal) > 1e-4) shopChanged = true;
+    const mergedShop: [number, number, number] = [
+      formShop[0] != null ? formShop[0] / 100 : origShop[0],
+      formShop[1] != null ? formShop[1] / 100 : origShop[1],
+      formShop[2] != null ? formShop[2] / 100 : origShop[2],
+    ];
+    if (Math.abs(mergedShop[0] - origShop[0]) > 1e-4 ||
+        Math.abs(mergedShop[1] - origShop[1]) > 1e-4 ||
+        Math.abs(mergedShop[2] - origShop[2]) > 1e-4) {
+      a.shop = mergedShop;
+      changed = true;
     }
-    if (shopChanged) a.shop = merged;
   }
 
-  // 狩猎站点 (多选): 变更才输出 (不含 prob — 后端会保留原 prob)
-  const sites = getMultiSelectValues("deHuntSites");
-  const origSites = base?.hunt?.sites || [];
-  if (!arraysEqual(sites, origSites)) a.hunt = { sites };
+  // 狩猎站点 — 必须 spread base.hunt 才能保留 prob
+  {
+    const sites = getMultiSelectValues("deHuntSites");
+    const origSites = base?.hunt?.sites || [];
+    if (!arraysEqual(sites, origSites)) {
+      a.hunt = { ...(base?.hunt || {}), sites };
+      changed = true;
+    }
+  }
 
-  // 养成失败来源 — 仅编辑模式
-  if (!isNew) {
+  // 养成失败来源
+  {
     const fail = getMultiSelectValues("deFailFrom");
     const origFail = base?.fail || [];
-    if (!arraysEqual(fail, origFail)) a.fail = fail;
+    if (!arraysEqual(fail, origFail)) {
+      a.fail = fail;
+      changed = true;
+    }
   }
 
-  const specialFeeding = ($("#deSpecialFeeding") as HTMLInputElement | null)?.checked ?? false;
-  const origSF = base?.specialFeeding || false;
-  if (isNew || origSF !== specialFeeding) a.specialFeeding = specialFeeding;
+  // 超分歧/超出世系
+  {
+    const sf = ($("#deSpecialFeeding") as HTMLInputElement | null)?.checked ?? false;
+    const origSF = base?.specialFeeding || false;
+    if (origSF !== sf) {
+      a.specialFeeding = sf;
+      changed = true;
+    }
+  }
 
-  return a;
+  return changed ? a : undefined;
 }
 
-/** 从友好字段构建 feeding 对象 (与基线对比,仅输出变更字段) */
-function buildFeeding(base: PigFeeding | undefined): PigFeeding {
-  const f: PigFeeding = {};
+/** 从友好字段构建 feeding 对象 — 同上,浅合并 base */
+export function buildFeeding(base: PigFeeding | undefined): PigFeeding | undefined {
+  let changed = false;
+  const f: PigFeeding = { ...(base || {}) };
+
   const interval = numOrNull(val("#deFeedInterval"));
-  const times = numOrNull(val("#deFeedTimes"));
-  const picky = getMultiSelectValues("deFeedPicky");
+  if (interval != null && interval !== base?.interval) {
+    f.interval = interval;
+    changed = true;
+  }
 
-  if (interval != null && interval !== base?.interval) f.interval = interval;
-  if (times != null && times !== base?.times) f.times = times;
-  if (!arraysEqual(picky, base?.picky || [])) f.picky = picky;
-  return f;
+  const times = numOrNull(val("#deFeedTimes"));
+  if (times != null && times !== base?.times) {
+    f.times = times;
+    changed = true;
+  }
+
+  const picky = getMultiSelectValues("deFeedPicky");
+  if (!arraysEqual(picky, base?.picky || [])) {
+    f.picky = picky;
+    changed = true;
+  }
+
+  return changed ? f : undefined;
 }
 
-/** 从友好字段构建 breedingGuide 对象 (与基线对比,仅输出变更字段) */
-function buildGuide(base: BreedingGuide | undefined): BreedingGuide {
-  const g: BreedingGuide = {};
+/** 从友好字段构建 breedingGuide 对象 — 同上,浅合并 base */
+export function buildGuide(base: BreedingGuide | undefined): BreedingGuide | undefined {
+  let changed = false;
+  const g: BreedingGuide = { ...(base || {}) };
+
   const req = val("#deGuideReq");
+  const baseReq = base?.requirements || "";
+  if (req && req !== baseReq) {
+    g.requirements = req;
+    changed = true;
+  }
+
   const tips = val("#deGuideTips");
-  if (req && req !== (base?.requirements || "")) g.requirements = req;
-  if (tips && tips !== (base?.tips || "")) g.tips = tips;
-  return g;
+  const baseTips = base?.tips || "";
+  if (tips && tips !== baseTips) {
+    g.tips = tips;
+    changed = true;
+  }
+
+  return changed ? g : undefined;
 }
 
 async function savePigFromForm(isNew: boolean): Promise<void> {
@@ -627,10 +682,10 @@ async function savePigFromForm(isNew: boolean): Promise<void> {
   const guide = buildGuide(basePig?.breedingGuide);
 
   // 仅在“未填高级 JSON 且 友好字段存在变更”时 才发送该 key
-  // 发出的值: 高级 JSON > diff 后的友好对象 > undefined(不发送,后端保留)
-  pig.acquisition = acqJSON !== undefined ? acqJSON : (Object.keys(acq).length ? acq : undefined);
-  pig.feeding = feedJSON !== undefined ? feedJSON : (Object.keys(feed).length ? feed : undefined);
-  pig.breedingGuide = guideJSON !== undefined ? guideJSON : (Object.keys(guide).length ? guide : undefined);
+  // 发出的值: 高级 JSON > 合并后的友好对象 > undefined(不发送,后端保留)
+  pig.acquisition = acqJSON !== undefined ? acqJSON : ((acq && Object.keys(acq).length) ? acq : undefined);
+  pig.feeding = feedJSON !== undefined ? feedJSON : ((feed && Object.keys(feed).length) ? feed : undefined);
+  pig.breedingGuide = guideJSON !== undefined ? guideJSON : ((guide && Object.keys(guide).length) ? guide : undefined);
 
   // 提示: 每行一条; 高级 JSON 优先; 与基线一致则不发 (含主动清空 → 输出 [])
   if (hintsJSON !== undefined) {
